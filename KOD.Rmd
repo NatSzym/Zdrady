@@ -1,0 +1,491 @@
+---
+title: "Projekt Modelowanie Parametryczne"
+author: "B.K., K. M., N. Ł., Szymańska Natalia"
+date: "24 06 2023"
+output: html_document
+---
+
+### Wczytanie potrzebnych bibliotek oraz danych:
+
+```{r}
+library(caret)
+library("readxl")
+library(ggplot2)
+library("car")
+library("ggplot2")
+library("pscl")
+library("pROC")
+library(lmtest)
+daneprojekt <- read_excel("C:/Users/Natalia/Desktop/Studia II stopnia/Semestr 2/Modele parameryczne/Projekt/daneprojektfinal.xlsx")
+```
+
+## Przygotowanie danych
+
+Do analizy podanych danych nie potrzebujemy zmiennej indeks, zatem zostanie usunięty: 
+
+```{r}
+dane <- subset(daneprojekt, select = -indeks)
+```
+
+Kolejnym krokiem jest sprawdzenie, czy nie mamy żadnych braków danych.
+
+```{r}
+sum(is.na(dane))
+```
+
+Dane nie zawierają żadnych braków danych, zatem nie trzeba wykonywać imputacji danych.
+
+### Opis zmiennych
+
+**affairs**
+
+Jest to zmienna opisująca czy osoba badana odbywała stosunek seksualny pozamałżeński w ciągu ostatniego roku. 1 oznacza tak, 0 nie. Jest to zmienna opisana na skali dychotomicznej. 
+
+```{r}
+ggplot(dane, aes(x = factor(affairs), fill = factor(affairs))) +
+  geom_bar() +
+  labs(title = "Liczba osób wiernych i zdradzających",
+       x = "Niewierność",
+       y = "Liczba osób") +
+  scale_fill_manual(values = c("0" = "blue", "1" = "red"),
+                    labels = c("Wierni", "Zdradzający")) +
+  theme(legend.position = "right") +
+  guides(fill = guide_legend(title = NULL))
+
+
+```
+
+**gender**
+
+Jest to zmienna opisująca płeć osoby badanej. Jest to również skala dychotomiczna. 0 oznacza kobietę, 1 mężczyznę.
+
+```{r}
+ggplot(dane, aes(x = factor(gender), fill = factor(gender))) +
+  geom_bar() +
+  labs(title = "Liczba kobiet i mężczyzn",
+       x = "Płeć",
+       y = "Liczba osób") +
+  scale_fill_manual(values = c("0" = "pink", "1" = "blue"),
+                    labels = c("Kobiety", "Mężczyźni")) +
+  theme(legend.position = "right" )+
+  guides(fill = guide_legend(title = NULL))
+```
+
+**age**
+
+Zmienna age zawiera informację o wieku badanej osoby. Jest to zmienna na skali porządkowej. Wiek został zakodowany w następujący sposób: 17.5 - poniżej 20 lat, 22 - od 20 do 24 lat, 27 - od 25 do 29 lat, 32 - od 30 do 34 lat, 37 - od 35 do 39 lat, 42 - od 40 do 44 lat, 47 - od 45 do 49 lat, 52 - od 50 do 54 lat oraz 57 co oznacza 55 lat i wyżej.
+
+```{r}
+nazwy <- c("Poniżej 20", "20-24", "25-29", "30-34", "35-39", "40-44", "45-49", "50-54", "55 i więcej")
+przedzialy <- c(0, 20, 25, 30, 35, 40, 45, 50, 55, Inf)
+dane$age_category <- cut(dane$age, breaks = przedzialy, labels = nazwy, include.lowest = TRUE)
+
+ggplot(dane, aes(x = age_category)) +
+  geom_bar() +
+  labs(title = "Rozkład wieku") +
+  xlab("Wiek") +
+  ylab("Liczba osób")
+```
+
+**yearsmarried**
+
+Zmienna opisująca liczbę lat spędzonych w małżeństwie. Jest to również zmienna porządkowa. Została zakodowana w następujący sposób: 0,125 = 3 miesiące lub mniej, 0,417 = 4-6 miesięcy, 0,75 = 6 miesięcy-1 rok, 1,5 = 1-2 lata, 4 = 3-5 lat, 7 = 6-8 lat, 10 = 9-11 lat, 15 = 12 lub więcej lat.
+
+```{r}
+nazwy <- c("3 miesiące lub mniej", "4-6 miesięcy", "6 miesięcy-1 rok", "1-2 lata", "3-5 lat", "6-8 lat", "9-11 lat", "12 lub więcej lat")
+przedzialy <- c(0.125, 0.417, 0.75, 1.5, 4, 7, 10, 15, Inf)
+dane$yearsmarried_category <- cut(dane$yearsmarried, breaks = przedzialy, labels = nazwy, include.lowest = TRUE)
+
+ggplot(dane, aes(x = yearsmarried_category)) +
+  geom_bar() +
+  labs(title = "Rozkład liczby lat w małżeństwie") +
+  xlab("Lata w małżeństwie") +
+  ylab("Liczba osób")
+```
+
+**children**
+
+Zmienna opisująca posiadanie przez małżeństwo dziecka. Zmienna dychotomiczna. 0 oznacza brak potomstwa, 1 posiadanie potomstwa.
+
+```{r}
+ggplot(dane, aes(x = factor(children), fill = factor(children))) +
+  geom_bar() +
+  labs(title = "Małżeństwa, a potomostwo.",
+       x = "Posiadanie dzieci",
+       y = "Liczba małżeństw") +
+  scale_fill_manual(values = c("0" = "tomato", "1" = "magenta"),
+                    labels = c("Brak", "1 lub więcej")) +
+  theme(legend.position = "right")+
+  guides(fill = guide_legend(title = NULL))
+```
+
+**religiousness**
+
+Zmienna zawierająca poziom religijności. Zmienna opisana na skali porządkowej. Kodowanie: 1 = anty, 2 = wcale, 3 = nieznacznie, 4 = nieco, 5 = bardzo.
+
+```{r}
+ggplot(dane, aes(x = factor(religiousness), fill = factor(religiousness))) +
+  geom_bar() +
+  labs(title = "Rozkład poziomu religijności",
+       x = "Poziom",
+       y = "Liczba osób") +
+  scale_fill_manual(values = c("1" = "#FFA500", "2" = "#FFD700", "3" = "#FFFF00", "4" = "#ADFF2F", "5" = "#00FFFF"),
+                    labels = c("anty", "wcale", "nieznacznie", "nieco", "bardzo")) +
+  theme(legend.position = "right")+
+  guides(fill = guide_legend(title = NULL))
+
+```
+
+
+**education**
+
+Jest to zmienna opisująca poziom wykształcenia osób badanych. Jest ona na sali nominalnej. Kodowanie: 9 = szkoła podstawowa, 12 = absolwent szkoły średniej, 14 = niektóre studia wyższe, 16 = absolwent college'u, 17 = niektóre prace dyplomowe, 18 = tytuł magistra, 20 = doktorat, magisterium lub inny zaawansowany stopień naukowy.
+
+```{r}
+nazwy <- c("Szkoła podstawowa", "Absolwent szkoły średniej", "Niektóre studia wyższe", "Absolwent college'u", "Niektóre prace dyplomowe", "Tytuł magistra", "Doktorat, magisterium lub inny zaawansowany stopień naukowy")
+
+ggplot(dane, aes(x = factor(education), fill = factor(education))) +
+  geom_bar() +
+  labs(title = "Rozkład poziomu wykształcenia",
+       x = "Poziom wykształcenia",
+       y = "Liczba osób") +
+  scale_fill_manual(values = c("9" = "orange", "12" = "yellow", "14" = "green", "16" = "blue", "17" = "purple", "18" = "pink", "20" = "red"),
+                    labels = nazwy) +
+  theme(legend.position = "right")+
+  guides(fill = guide_legend(title = NULL))
+
+```
+
+**occupation**
+
+Jest to zmienna opisująca zawód według klasyfikacji Hollingsheada. Kodowanie: 1 - Niewykwalifikowany , 2 - Operatorzy maszyn, średnio wykwalifikowani, 3 - Robotnik wykwalfikowany, 4 - Pracownik biurowy i sprzedaży, technik, 5 - Personel administracyjny, 6 - Biznesmen, menedżer, 7 - Wyższa kadra kierownicza, główny specjalista.
+
+```{r}
+nazwy <- c("Niewykwalifikowany", "Operatorzy maszyn, średnio wykwalifikowani", "Robotnik wykwalfikowany", "Pracownik biurowy i sprzedaży, technik", "Personel administracyjny", "Biznesmen, menedżer", "Wyższa kadra kierownicza, główny specjalista")
+
+ggplot(dane, aes(x = factor(occupation), fill = factor(occupation))) +
+  geom_bar() +
+  labs(title = "Rozkład zawodów według klasyfikacji Hollingsheada",
+       x = "Zawód",
+       y = "Liczba osób") +
+  scale_fill_manual(values = c("1" = "darkgreen", "2" = "green", "3" = "lightgreen", "4" = "lightblue", "5" = "blue", "6" = "purple", "7" = "pink"),
+                    labels = nazwy) +
+  theme(legend.position = "right")+
+  guides(fill = guide_legend(title = NULL))
+
+```
+
+**rating**
+
+Jest to zmienna zawierająca informację o samoocenie małżeństwa. Jest to zmienna na skali nominalnej. Kodowanie: 1 = bardzo nieszczęśliwy, 2 = nieco nieszczęśliwy, 3 = przeciętny, 4 = szczęśliwszy niż przeciętny, 5 = bardzo szczęśliwy.
+
+```{r}
+nazwy <- c("B. nieszczęśliwy", "Nieszczęśliwy", "Przeciętny", "Szczęśliwszy", "B. szczęśliwy")
+dane$samoocena_malzenstwa <- cut(dane$rating, breaks = c(0, 1, 2, 3, 4, 5), labels = nazwy)
+
+ggplot(dane, aes(x = factor(samoocena_malzenstwa), fill = factor(samoocena_malzenstwa))) +
+  geom_bar() +
+  labs(title = "Rozkład samooceny małżeństwa",
+       x = "Samoocena",
+       y = "Liczba osób") +
+  scale_fill_manual(values = c("B. nieszczęśliwy" = "red", "Nieszczęśliwy" = "orange", "Przeciętny" = "yellow", "Szczęśliwszy" = "lightgreen", "B. szczęśliwy" = "green"),
+                    labels = nazwy) +
+  theme(legend.position = "right")+
+  guides(fill = guide_legend(title = NULL))
+```
+
+
+Zapis danych bez kolumn pomocniczych stworzonych w celu wygenerowania wykresów: 
+
+```{r}
+dane1 <- subset(dane, select = -c(age_category, yearsmarried_category, samoocena_malzenstwa))
+```
+
+Niekodowane dane: 
+
+```{r}
+nie_dane <- data.frame(
+  affairs = ifelse(dane$affairs == 0, "Wierny", "Niewierny"),
+  gender = ifelse(dane$gender == 0, "Female", "Male"),
+  age = dane$age_category,
+  yearsmerried = dane$yearsmarried_category,
+  children = ifelse(dane$children == 0, "Brak", "1 lub więcej"),
+  religiousness = factor(dane$religiousness, levels = c(1, 2, 3, 4, 5), labels = c("Anty", "Wcale", "Nieznacznie", "Nieco", "Bardzo")),
+  education = factor(dane$education, levels = c(9, 12, 14, 16, 17, 18, 20), labels = c("Szkoła podstawowa", "Absolwent szkoły średniej", "Niektóre studia wyższe", "Absolwent college'u", "Niektóre prace dyplomowe", "Tytuł magistra", "Doktorat/magisterium")),
+  occupation = factor(dane$occupation, levels = c(1, 2, 3, 4, 5, 6, 7, 8), labels = c("Wyższa kadra kierownicza", "Biznesmen/menedżer", "Personel administracyjny", "Pracownik biurowy/sprzedaż/technik", "Robotnik wykwalifikowany", "Operator maszyn/średnio wykwalifikowany", "Niewykwalifikowany", "Nigdy niezatrudniony")),
+  rating = dane$samoocena_malzenstwa)
+
+nie_dane
+
+```
+
+Statystyki opisowe dla poszczególnych zmiennych:
+
+```{r}
+nie_dane$affairs <- as.factor(nie_dane$affairs)
+nie_dane$gender <- as.factor(nie_dane$gender)
+nie_dane$children <- as.factor(nie_dane$children)
+nie_dane$yearsmerried <- droplevels(nie_dane$yearsmerried)
+nie_dane$occupation <- droplevels(nie_dane$occupation)
+nie_dane$age <- as.factor(nie_dane$age)
+summary(nie_dane)
+```
+
+## Współczynnik tau Kendalla 
+
+```{r}
+round(cor(dane1[,c(1,3,4,5,6,7,8,9)], method = "kendall"),4)
+```
+
+```{r}
+dane1 <- dane1[,c(1,2,4,5,6,7,8,9)]
+```
+
+## Podział zbioru na uczący i testowy
+Zbiór danych został podzielony na zbiór danych uczący tak zwany treningowy oraz zbiór danych testowy. Dalej dane uczące zostały wykorzystane do zbudowania modelu, a zbiór testowy do jego oceny. Dokonano losowego podziału w proporcji: 70% i 30% odpowiednio.
+
+```{r}
+set.seed(1257)
+n <- nrow(dane1)
+liczby_losowe <- sample(c(1:n), round(0.7*n), replace = FALSE)
+dane1_uczacy <- dane1[liczby_losowe,]
+dane1_testowy <- dane1[-liczby_losowe,]
+```
+
+Następnie sprawdzono jakie są proporcje wiernych i zdradzających w podzbiorach danych.
+
+Proporcje danych w początkowym zbiorze danych:
+
+```{r}
+table(dane1$affairs)/nrow(dane1)
+```
+Proporcje w zestawie danych uczących:
+
+```{r}
+table(dane1_uczacy$affairs)/nrow(dane1_uczacy)
+```
+
+Proporcje danych w zestawie testowym:
+```{r}
+table(dane1_testowy$affairs)/nrow(dane1_testowy)
+```
+Proporcja w zbiorach uczącym i testowym są podobne do proporcji wiernych i niewiernych w początkowym zbiorze danych. Zatem podział wyszedł poprawnie.
+
+
+## Estymacja modeli dwumianowych logitowych
+Estymujemy model dla zmiennej dychotomicznej Y - affairs `family = binomial` z domyślną funkcją wiążącą probit `link = logit`
+
+```{r}
+dane1_uczacy <- as.data.frame(lapply(dane1_uczacy, as.factor))
+#logit1 <- glm(affairs ~ gender, data = dane1_uczacy, family = binomial)
+#summary(logit1)$coefficients
+#logit2 <- glm(affairs ~ age, data = dane1_uczacy, family = binomial)
+#summary(logit2)$coefficients
+#logit3 <- glm(affairs ~ children, data = dane1_uczacy, family = binomial)
+#summary(logit3)$coefficients
+#logit4 <- glm(affairs ~ religiousness, data = dane1_uczacy, family = binomial)
+#summary(logit4)$coefficients
+#logit5 <- glm(affairs ~ education, data = dane1_uczacy, family = binomial)
+#summary(logit5)$coefficients
+#logit6 <- glm(affairs ~ occupation, data = dane1_uczacy, family = binomial)
+#summary(logit6)$coefficients
+#logit7 <- glm(affairs ~ rating, data = dane1_uczacy, family = binomial)
+#summary(logit7)$coefficients
+#Z modeli logitowych jednoczynnikowych wynika, że zmienne: gender, age, education nie są istotne statystycznie (p-value przy tych zmiennych jest wyższe od poziomu istotności 0.05). Co oznacza, że zmienne te nie wypływają na zmienną objaśnianą affairs. 
+```
+
+
+```{r}
+logit0 <- glm(affairs ~ gender + yearsmarried + children + religiousness+ education+ occupation + rating ,family = binomial, data = dane1_uczacy)
+#affair_logit8 <- glm(affairs ~ yearsmarried + children + religiousness + occupation + rating ,family = binomial, data = dane1_uczacy)
+round(summary(logit0)$coefficients,4)
+```
+
+P-value dla zmiennej yearsarried jest większe od przyjętego pozimu istotności 0.05, zatem nie odrzucamy hipotezy zerowej na rzecz hipotezy alternatywnej. Zmienna nie jest istotna statystycznie w tym modelu, zatem nie wpływa na zmienną objaśnianą affairs.
+
+```{r}
+lrtest(logit0)
+waldtest(logit0)
+```
+
+```{r}
+logit1 <- glm(affairs ~ yearsmarried + children + religiousness+ education+ occupation + rating ,family = binomial, data = dane1_uczacy)
+round(summary(logit1)$coefficients,4)
+```
+
+```{r}
+logit2 <- glm(affairs ~ children + religiousness+ education+ occupation + rating ,family = binomial, data = dane1_uczacy)
+round(summary(logit2)$coefficients,4)
+```
+
+```{r}
+logit3 <- glm(affairs ~  children + religiousness+ occupation + rating ,family = binomial, data = dane1_uczacy)
+round(summary(logit3)$coefficients,4)
+```
+
+```{r}
+dane2_uczacy <- dane1_uczacy
+dane2_uczacy$religiousness <- ifelse(dane2_uczacy$religiousness %in% c(4,5), 3,       ifelse(dane2_uczacy$religiousness %in% c(2,3), 2,dane2_uczacy$religiousness))
+```
+
+```{r}
+dane2_uczacy$occupation <- ifelse(dane2_uczacy$occupation %in% c(1,2), 1,
+                                  ifelse(dane2_uczacy$occupation %in% c(3,4,5), 2, 3))
+
+dane2_uczacy$rating <- ifelse(dane2_uczacy$rating %in% c(1,2), 1,
+                              ifelse(dane2_uczacy$rating == 3, 2, 3))
+```
+
+
+```{r}
+dane2_testowy <- dane1_testowy
+dane2_testowy$religiousness <- ifelse(dane2_testowy$religiousness %in% c(4,5), 3,
+                                     ifelse(dane2_testowy$religiousness %in% c(2,3), 2,dane2_testowy$religiousness))
+dane2_testowy$occupation <- ifelse(dane2_testowy$occupation %in% c(1,2), 1,
+                                  ifelse(dane2_testowy$occupation %in% c(3,4,5), 2, 3))
+
+dane2_testowy$rating <- ifelse(dane2_testowy$rating %in% c(1,2), 1,
+                              ifelse(dane2_testowy$rating == 3, 2, 3))
+```
+
+
+```{r}
+dane2_uczacy <- as.data.frame(lapply(dane2_uczacy, as.factor))
+dane2_testowy <- as.data.frame(lapply(dane2_testowy, as.factor))
+logit4 <- glm(affairs ~  children + religiousness+ occupation + rating ,family = binomial, data = dane2_uczacy)
+round(summary(logit4)$coefficients,4)
+```
+
+Dla modelu logitowego testy statystyczne dla poszczególnych parametrów przy zmiennych children, religiousness, occupation i rating pokazały, że każdy z tych parametrów jest istotny statystycznie.
+
+```{r}
+lrtest(logit4)
+waldtest(logit4)
+```
+
+Odrzucamy hipotezę zerową na rzecz hipotezy alternatywnej, że przynajmniej jedna ze zmiennych jest istotna statystycznie.
+
+
+## Estymacja modelu dwumianowego probitowego
+Estymujemy model dla zmiennej dychotomicznej/binarnej Y `family = binomial` z funkcją wiążącą probit `link = probit`
+
+```{r}
+probit <- glm(affairs ~  children + religiousness+ occupation + rating, data = dane2_uczacy, family = binomial(link=probit))
+round(summary(probit)$coefficients,4)
+```
+
+Grupa referecyjna w modelu logitowym: Małżeństwa bez dzieci, ateiści, pracujący jako wyższa kadra kierownicza, bardzo nieszczęśliwi w swoich związkach.
+
+## Ocena modeli
+
+```{r}
+ocena_modelu_dwum <- function(model) {
+  kryterium_AIC <- c(model$aic)
+  McFadden<-pR2(model)[4]
+  Cragg_Uhler<-pR2(model)[6]
+  ocena <- data.frame(kryterium_AIC, McFadden, Cragg_Uhler)
+  return(ocena)
+}
+wyniki_oceny_logit <- rbind(
+  logitowy=ocena_modelu_dwum(logit4), 
+  probitowy=ocena_modelu_dwum(probit))
+wyniki_oceny_logit
+```
+### Porównanie jakości predykcji modeli logit1 i probit1
+
+Tablice trafności dla wybranego punktu odcięcia p*
+
+Niech p* = proporcja z próby uczącej
+```{r}
+p <- table(dane2_uczacy$affairs)[2]/nrow(dane2_uczacy)
+
+cat("Tablica trafności dla modelu logitowego - próba ucząca\n")
+tab_traf <- data.frame(obserwowane=logit4$y, przewidywane=ifelse(logit4$fitted.values>p, 1, 0))
+table(tab_traf)
+
+cat("Tablica trafności dla modelu probitowego - próba ucząca\n")
+tab_traf <- data.frame(obserwowane=probit$y, przewidywane=ifelse(probit$fitted.values>p, 1, 0))
+table(tab_traf)
+
+cat("Tablica trafności dla modelu logitowego - próba testowa\n")
+tab_traf <- data.frame(obserwowane=dane2_testowy$affairs, przewidywane=ifelse(predict(logit4, dane2_testowy, type = "response")>p, 1, 0))
+table(tab_traf)
+
+cat("Tablica trafności dla modelu probitowego - próba testowa\n")
+tab_traf <- data.frame(obserwowane=dane2_testowy$affairs, przewidywane=ifelse(predict(probit, dane2_testowy, type = "response")>p, 1, 0))
+table(tab_traf)
+```
+
+```{r}
+miary_pred <- function(model, dane, Y, p = 0.5) {
+  tab <- table(obserwowane = Y, przewidywane = ifelse(predict(model, dane, type = "response") > p, 1, 0))
+  ACC <- (tab[1,1]+tab[2,2])/sum(tab)
+  ER <- (tab[1,2]+tab[2,1])/sum(tab)
+  #Proszę dopisać pozostałe miary jakości predykcji
+  SENS <- tab[2,2]/(tab[2,1]+tab[2,2])
+  SPEC <- tab[1,1]/(tab[1,1]+tab[1,2])
+  PPV <- tab[2,2]/(tab[1,2]+tab[2,2])
+  NPV <- tab[1,1]/(tab[1,1]+tab[2,1])
+  miary <- data.frame(ACC, ER, SENS, SPEC, PPV, NPV)
+  return(miary)
+}
+```
+
+Ocena zdolności predykcyjnej na zbiorze uczącym:
+
+```{r}
+wyniki_miary_pred <- rbind(
+  model_logit = miary_pred(model = logit4, dane = dane2_uczacy,  Y = dane2_uczacy$affairs, p), 
+  model_probit = miary_pred(model = probit, dane = dane2_uczacy, Y = dane2_uczacy$affairs,  p))
+round(wyniki_miary_pred,4)
+```
+
+Ocena zdolności predykcyjnej na zbiorze testowym
+
+```{r}
+wyniki_miary_pred <- rbind(
+  model_logit = miary_pred(model = logit4, dane = dane2_testowy,  Y = dane2_testowy$affairs, p), 
+  model_probit = miary_pred(model = probit, dane = dane2_testowy, Y = dane2_testowy$affairs,  p))
+round(wyniki_miary_pred,4)
+```
+
+## Krzywa ROC
+
+```{r}
+rocobj1 <- roc(logit4$y, logit4$fitted.values)
+rocobj1_t <- roc(dane2_testowy$affairs, predict(logit4, dane2_testowy, type = "response"))
+plot(rocobj1, main = "Krzywe ROC dla modelu logitowego", col="red")
+lines(rocobj1_t, col="blue")
+
+rocobj2 <- roc(probit$y, probit$fitted.values)
+rocobj2_t <- roc(dane2_testowy$affairs, predict(probit, dane2_testowy, type = "response"))
+plot(rocobj2, main = "Krzywe ROC dla modelu probitowego", col="red")
+lines(rocobj2_t, col="blue")
+```
+
+#### AUC - pole powierzchni pod krzywą ROC
+
+dla zbioru uczącego
+```{r message=FALSE}
+auc(logit4$y, logit4$fitted.values)
+auc(probit$y, probit$fitted.values)
+```
+
+dla zbioru testowego
+```{r message=FALSE}
+auc(dane2_testowy$affairs, predict(logit4, dane2_testowy, type = "response"))
+auc(dane2_testowy$affairs, predict(probit, dane2_testowy, type = "response"))
+```
+
+## Interpretacja modelu logitowego
+
+```{r}
+round(exp(logit4$coefficients),3)
+```
+
+
+
+
+
+
+
